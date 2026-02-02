@@ -116,4 +116,4 @@ The dataset is the foundation of our model's accuracy. We transitioned to IMFDB 
 5.  **Start UI**: `python app.py`
 
 ---
-Developed for high-fidelity avatar generation. © 2026 Antigravity AI Project.
+Developed by "GUNI Research Intern Team"
