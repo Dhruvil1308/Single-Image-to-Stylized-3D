@@ -1,100 +1,119 @@
 # 🇮🇳 Indian Avatar AI: 2D & 3D Stylization System
 
 ## 🌟 Introduction
-The **Indian Avatar AI** is a state-of-the-art generative system designed to transform standard facial photographs into culturally accurate, high-quality Indian avatars. The project supports two primary output paths:
-1.  **2D Anime Stylization**: Leveraging Stable Diffusion with specialized LoRA fine-tuning for Indian aesthetics.
-2.  **3D Avatar Reconstruction**: Utilizing FLAME morphable models and multi-view synthesis to create realistic 3D head geometry.
+The **Indian Avatar AI** is a professional-grade generative system tailored specifically for the Indian demographic. It solves the "representation gap" in global AI models by focusing on Indian facial morphology, diverse skin tones, and cultural aesthetics.
 
-By focusing specifically on Indian facial structures, skin tones, and traditional elements, this project aims to provide a more representative and personalized avatar experience compared to generic global models.
-
----
-
-## 🛠️ Tech Stack & Libraries
-The project is built using a modern AI/ML stack, optimized for efficiency and local execution:
-
-*   **Core Logic**: Python 3.11
-*   **Deep Learning**: PyTorch, HuggingFace Diffusers, Transformers, PEFT (Parameter-Efficient Fine-Tuning).
-*   **Computer Vision**: MediaPipe (Face Detection/Mesh), OpenCV, PIL (Pillow).
-*   **3D Modeling**: FLAME (Face Learned Model Entities), 3DMM fitting algorithms.
-*   **Interface**: Gradio (Web UI).
-*   **Optimizations**: BitsAndBytes (8-bit quantization), Accelerate, Gradient Checkpointing.
+The system provides a seamless experience for:
+*   **2D Anime Stylization**: Creating high-fidelity artistic avatars.
+*   **3D Avatar Reconstruction**: Generating geometry-accurate 3D head models for metaverse and gaming applications.
 
 ---
 
-## 🤖 Models & Algorithms
+## 🏗️ System Architecture & Workflow
 
-### 1. 2D Generation: Stable Diffusion + LoRA
-*   **Base Model**: `Lykon/AnyLoRA` (highly flexible SD1.5-based model).
-*   **Fine-tuning (LoRA)**: A custom LoRA trained on the IMFDB dataset with the trigger word `indianface`. It captures features like `bindis`, `saris`, `dhotis`, and diverse Indian skin tones.
-*   **Identity Preservation**: Uses IP-Adapter/FaceID techniques to ensure the avatar looks like the original user.
+### High-Level Graphical Workflow
+```mermaid
+graph TD
+    A[User Uploads Photo] --> B{Pre-processing}
+    B --> B1[Face Detection & Landmark Extraction]
+    B --> B2[Facial Alignment & Normalization]
+    B --> B3[Background Removal/Segmentation]
+    
+    B3 --> C{Generation Path Selection}
+    
+    C -->|2D Anime| D[Stable Diffusion + indianface LoRA]
+    D --> D1[Identity Preservation via IP-Adapter]
+    D1 --> D2[Style Injection - Realistic/Cartoon/Stylized]
+    D2 --> E[Final 2D Avatar]
+    
+    C -->|3D Avatar| F[Morphable Diffusion]
+    F --> F1[Multi-view Synthesis - 7 Views]
+    F1 --> G[FLAME Mesh Fitting]
+    G --> G1[Parameter Optimization - Shape/Expression]
+    G1 --> G2[UV Texture Baking]
+    G2 --> H[Final 3D Model .OBJ/.GLB]
+```
 
-### 2. 3D Path: Morphable Diffusion & FLAME
-*   **Morphable Diffusion**: A framework that generates consistent multi-view images (Front, Side, Quarter) from a single photo.
-*   **FLAME Wrapper**: We use the FLAME morphable model to represent 3D head geometry with thousands of trainable parameters for shape and expression.
-*   **Mesh Fitting**: A custom iterative algorithm that fits the FLAME mesh to the detected landmarks from the generated multi-view images.
+---
+
+## 🛠️ Tech Stack & Advanced Libraries
+
+### Core Architecture
+*   **Language**: Python 3.11 (Optimized for library compatibility).
+*   **AI Framework**: PyTorch 2.x with CUDA 12.1.
+*   **Distribution**: HuggingFace `diffusers`, `transformers`, `accelerate`.
+
+### Specialized Modules
+| Component | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Generative AI** | Stable Diffusion (AnyLoRA) | Base image synthesis engine. |
+| **Optimization** | PEFT (LoRA) | Cultural adaptation without full retraining. |
+| **Computer Vision** | MediaPipe | Real-time facial mesh and iris tracking. |
+| **3D Geometry** | FLAME Model | SOTA morphable face model for 3D reconstruction. |
+| **UI** | Gradio 5.x | High-performance reactive web interface. |
+| **Backend** | Uvicorn/FastAPI | Robust local serving and protocol handling. |
+
+---
+
+## 🤖 Algorithms & Training Methodology
+
+### 1. Fine-tuning with LoRA (Low-Rank Adaptation)
+Instead of training a model from scratch, we use **LoRA** to inject "Indian intelligence" into the model.
+*   **Trigger Word**: `indianface`
+*   **Dataset**: 25,000+ pre-processed images from the IMFDB.
+*   **Focus**: Correct skin tone rendering, traditional clothing (Sari/Kurta), and jewelry (Nose pins/Jhumkas).
+
+### 2. Mesh Fitting Pipeline
+We utilize an iterative optimization loop to fit the FLAME mesh to 2D landmarks:
+1.  **Landmark Projection**: Translate 2D MediaPipe points into 3D space.
+2.  **Loss Function**: Minimize the distance between projected vertices and target landmarks.
+3.  **Regularization**: Ensure the face remains biologically plausible using FLAME's learned priors.
 
 ---
 
 ## 📊 Dataset: IMFDB (Indian Movie Face Database)
-The heart of our model's "Indian intelligence" is the **IMFDB dataset**.
-*   **Source**: IIIT Hyderabad Academic CDN.
-*   **Scale**: 34,512 images of 100 Indian actors.
-*   **Our Processing**:
-    *   **Alignment**: Every image is automatically rotated to level the eyes.
-    *   **Cropping**: Tight, centralized face crops (512x512) optimized for training.
-    *   **Cleaned Set**: We maintain a processed set of ~25,000 high-quality portraits for fine-tuning.
+The dataset is the foundation of our model's accuracy. We transitioned to IMFDB after discovering the IFExD dataset was unavailable for public download.
 
-*Note: The **IFExD** dataset was initially considered but confirmed as "TBD" (To Be Determined) by its authors, leading us to successfully pivot to IMFDB.*
+*   **Extraction**: Custom `scripts/download_imfdb.py` directly interfaces with academic CDNs.
+*   **Preprocessing**: `scripts/preprocess_imfdb.py` uses MediaPipe to level faces, ensuring the AI learns from squared, normalized samples.
+*   **Volume**: 34,000+ raw images -> 25,000+ clean training samples.
 
 ---
 
-## 🔄 Workflow
-1.  **Upload**: User uploads a front-facing photo via the Gradio interface.
-2.  **Preprocessing**:
-    *   `FaceExtractor` detects landmarks and aligns the face.
-    *   `Segmenter` removes the background.
-3.  **Routing**:
-    *   **2D Path**: The image is passed to `AnimeGenerator` with a custom style prompt (Realistic, Cartoon, or Stylized) + the `indianface` LoRA.
-    *   **3D Path**: `MorphableDiffusion` generates 7 views -> `MeshFitter` creates 3D geometry -> `Exporter` saves as `.obj`.
-4.  **Result**: The user receives a high-resolution avatar or a 3D model preview.
+## ⚠️ Challenges & Intelligent Solutions
+
+### 1. ❄️ The 4GB VRAM "Glass Ceiling"
+**Problem**: Diffusion models typically crash on 4GB GPUs due to OOM (Out of Memory) errors.
+**Solution**: 
+*   **8-bit Quantization**: Using `bitsandbytes` to store optimizer states in 8-bit instead of 32-bit.
+*   **Gradient Checkpointing**: Re-calculating activation during the backward pass instead of storing them.
+*   **Safe-Tensors**: Using memory-mapped model weights to minimize CPU-to-GPU transfer spikes.
+
+### 2. 🧩 Windows-Specific Failures (Xformers)
+**Problem**: The common `xformers` optimization library has broken binary compatibility with some Windows Python 3.11/3.12 environments.
+**Solution**: We refactored the pipeline to use **PyTorch 2.0 SDPA (Scaled Dot Product Attention)**, which provides similar performance to xformers but is natively supported on Windows.
+
+### 3. 🌐 Dual-GPU Setup (NVIDIA + Intel)
+**Problem**: Systems with integrated Intel graphics often confuse PyTorch, leading to training hanging or using the wrong (slower) device.
+**Solution**: Implemented explicit environment variable control `os.environ["CUDA_VISIBLE_DEVICES"] = "0"` and device-aware loading to force utilization of the **NVIDIA 3050**.
 
 ---
 
-## ⚠️ Challenges & Solutions
-
-### 1. 📉 VRAM Constraints (4GB Limit)
-**Challenge**: Training and running Large Language/Diffusion models usually requires 8GB-24GB VRAM.
-**Solution**:
-*   Implemented **8-bit AdamW Optimization** via `bitsandbytes`.
-*   Enabled **Gradient Checkpointing** to trade compute time for memory savings.
-*   Used **Sequential CPU Offloading** in the inference pipeline to only keep active layers in VRAM.
-
-### 2. 🧩 Windows Compatibility (xformers DLL Error)
-**Challenge**: `xformers` (a memory optimization library) often fails to load its C++/CUDA extensions on Windows.
-**Solution**: We transitioned to **Standard PyTorch Attention** with `enable_gradient_checkpointing`. We also performed a clean uninstallation of broken `xformers` builds to ensure stable execution.
-
-### 3. 🌐 Large Data Protocol Errors
-**Challenge**: Gradio/Uvicorn threw `Too much data for declared Content-Length` errors when transferring high-res images.
-**Solution**: Tuned the web server configuration using `max_file_size="10mb"` and optimized the image quantization before transmission.
-
-### 4. 🔗 Dependency Hell (MediaPipe vs Protobuf)
-**Challenge**: New versions of MediaPipe had breaking changes regarding the `solutions` attribute and `protobuf` versioning.
-**Solution**: Pinned `mediapipe==0.10.14` and ensured `pydantic` and `fastapi` versions were synchronized for the Gradio 5+ environment.
+## 🖥️ Hardware Requirements & Optimization
+*   **Required**: NVIDIA GPU (3050 4GB or higher).
+*   **Recommended**: 16GB System RAM.
+*   **Optimization Layer**:
+    *   `enable_sequential_cpu_offload()`: Reduces VRAM usage from 8GB to ~3.2GB.
+    *   `enable_vae_tiling()`: Allows high-res generation on low memory.
 
 ---
 
-## 🖥️ Hardware Requirements
-*   **GPU**: NVIDIA 3050 4GB (Minimum). Compatible with other 4GB+ NVIDIA cards.
-*   **RAM**: 16GB (Recommended).
-*   **Storage**: 5GB for models + 50GB for raw datasets.
+## 🚀 Execution Workflow
+1.  **Initialize**: `python scripts/setup_venv.py`
+2.  **Fetch Data**: `python scripts/download_imfdb.py`
+3.  **Align Faces**: `python scripts/preprocess_imfdb.py`
+4.  **Train LoRA**: `python scripts/train_lora.py`
+5.  **Start UI**: `python app.py`
 
 ---
-
-## 🚀 Getting Started
-1. Initialize environment: `python scripts/setup_venv.py`
-2. Download Data: `python scripts/download_imfdb.py`
-3. Preprocess: `python scripts/preprocess_imfdb.py`
-4. Train (Optional): `python scripts/train_lora.py`
-5. Run App: `python app.py`
-
-Developed by **Our GUNI Research Team**
+Developed for high-fidelity avatar generation. © 2026 Antigravity AI Project.

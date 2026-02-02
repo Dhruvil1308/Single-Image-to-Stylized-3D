@@ -26,9 +26,20 @@ class AnimeGenerator:
             self.pipe.enable_sequential_cpu_offload() # Massive VRAM savings
             self.pipe.enable_attention_slicing()      # Save memory during attention
             self.pipe.enable_vae_tiling()             # Save memory for large images
-            self.pipe.enable_xformers_memory_efficient_attention() # Reduce overhead
+            # Disable xformers by default for Windows stability, but keep as option
+            # self.pipe.enable_xformers_memory_efficient_attention() 
         
         self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(self.pipe.scheduler.config)
+
+        # 3. Load custom Indian Face LoRA if available
+        lora_path = "models/indianface_lora"
+        if os.path.exists(lora_path):
+            print(f"Loading custom Indian Face LoRA from {lora_path}...")
+            try:
+                self.pipe.load_lora_weights(lora_path)
+                print("LoRA weights loaded successfully.")
+            except Exception as e:
+                print(f"Failed to load LoRA: {e}")
         
         # Load IP-Adapter for identity preservation
         # self.pipe.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name="ip-adapter-full-face_sd15.bin")
@@ -42,10 +53,11 @@ class AnimeGenerator:
                 return face_image
 
         # Style mapping for Indian context
+        # 'indianface' is our trigger word for the custom LoRA
         style_prompts = {
-            "Realistic": "high-quality professional portrait, realistic indian person, sharp focus, 8k uhd",
-            "Cartoon": "disney pixar style cartoon, cute indian character, 3d render, claymation aesthetic, big eyes",
-            "Stylized": "stylized digital art, concept art, beautiful indian facial features, vibrant colors, artistic illustration"
+            "Realistic": "high-quality professional portrait, realistic indian person, indianface style, sharp focus, 8k uhd",
+            "Cartoon": "disney pixar style cartoon, cute indian character, indianface style, 3d render, claymation aesthetic, big eyes",
+            "Stylized": "stylized digital art, concept art, indianface style, beautiful indian facial features, vibrant colors, artistic illustration"
         }
         
         base_prompt = style_prompts.get(style, style_prompts["Stylized"])

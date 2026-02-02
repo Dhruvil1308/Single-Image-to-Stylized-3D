@@ -144,6 +144,29 @@ def train():
                 progress_bar.update(1)
                 global_step += 1
                 
+                # Intermediate checkpointing and validation
+                if global_step % 100 == 0:
+                    print(f"\n[Step {global_step}] Saving intermediate checkpoint...")
+                    checkpoint_dir = os.path.join(OUTPUT_DIR, f"checkpoint-{global_step}")
+                    unet.save_pretrained(checkpoint_dir)
+                    
+                    # Optional: Generate a sample to see progress
+                    print(f"[Step {global_step}] Generating validation sample...")
+                    try:
+                        # Temporary pipeline for validation
+                        validation_pipe = StableDiffusionPipeline.from_pretrained(
+                            MODEL_NAME, unet=accelerator.unwrap_model(unet), torch_dtype=torch.float16
+                        ).to(device)
+                        validation_pipe.enable_attention_slicing()
+                        
+                        sample_prompt = "a professional portrait of an indian person, indianface style, high quality"
+                        sample_image = validation_pipe(sample_prompt, num_inference_steps=20).images[0]
+                        sample_image.save(os.path.join(OUTPUT_DIR, f"sample-{global_step}.jpg"))
+                        del validation_pipe # Free VRAM immediately
+                        torch.cuda.empty_cache()
+                    except Exception as ve:
+                        print(f"Validation failed: {ve}")
+                
                 if global_step >= MAX_TRAIN_STEPS:
                     break
         if global_step >= MAX_TRAIN_STEPS:
