@@ -62,7 +62,27 @@ graph TD
     style FINAL fill:#00ff00,stroke:#333,stroke-width:3px
 ```
 
-### 2. View Synthesis Control Sequence
+### 2. Layered Architecture Deep-Dive
+To ensure modularity and scalability, the system is organized into four distinct logical layers:
+
+| Layer | Responsibility | Key Components |
+| :--- | :--- | :--- |
+| **Data Layer** | Acquisition and Pre-processing | IMFDB Scrapers, MediaPipe Aligners, Background Segmentors |
+| **Model Layer** | Inference and Feature Extraction | 3DDFA_V2 (ONNX), Stable Diffusion XL, indianface LoRA |
+| **Fusion Layer** | Integration and Refinement | MeshRefiner (v2.0), TextureComposer (Cubic Blending) |
+| **UI/UX Layer** | Interaction and Visualization | Gradio 5.x Reactive Interface, View Slider, BFM Sliders |
+
+### 3. End-to-End Pipeline Process
+The lifecycle of a single 3D avatar generation follows a 6-stage critical path:
+
+1.  **Ingestion & ROI Extraction**: The input image is parsed via MediaPipe; a 2D bounding box and 468 landmarks are extracted to define the Region of Interest (ROI).
+2.  **Parametric Fitting**: The ROI is normalized to 120x120 pixels and passed through the 3DDFA_V2 MobileNet. 62-dimensional 3DMM parameters are regressed to define the "skeletal" shape.
+3.  **Geometric Warping (Hinting)**: Using the regressed pose, the original 2D image is mathematically warped to 16 virtual camera positions, creating "structural hints."
+4.  **ControlNet Synthesis**: These hints are converted to Canny edge maps. Stable Diffusion uses these maps as a stencil to synthesize high-fidelity side and back-of-head textures.
+5.  **Geometry Perfection**: The base BFM mesh undergoes 4x subdivision and Laplacian smoothing to achieve a premium, human-like surface finish.
+6.  **Cubic Texture Fusion**: All 16 synthesized views are projected onto the refined mesh using angle-weighted confidence blending to produce the final textured 3D model.
+
+### 4. View Synthesis Control Sequence
 We use a **Double-Guarded Diffusion** strategy to generate profiles (Yaw 45-90°) and back-of-head views.
 
 ```mermaid
@@ -102,7 +122,22 @@ To achieve professional-grade results, we implemented:
 ### 🎨 Intelligent Texture Blending
 The **TextureComposer** uses sophisticated sampling to blend 16 views:
 *   **Luminance Matching**: Histogram normalization ensures that synthetic side views matches the original photo's lighting.
-*   **Sharp Blending**: $Weight = Confidence^{3.0}$ — using a high confidence power ensures that only the best camera view colors each region, preventing "ghosting" artifacts.
+*   **Luminance Normalization**: Every synthesized view's average brightness is matched to the original photo's histogram to prevent visible seams.
+
+---
+
+## 📊 Data Engineering & Datasets
+
+### 1. IMFDB (Indian Movie Face Database)
+The intelligence of our cultural LoRA comes from the **IMFDB**, a large-scale database containing over **34,512 images** of 445 Indian actors.
+*   **Diversity**: Covers wide variations in age, pose, expression, lighting, and cultural attire (Sari, Pagri, Bindi).
+*   **Significance**: Specifically chosen to overcome the bias of Western datasets like FFHQ, ensuring accurate prediction of Indian skin tones and bone structures.
+
+### 2. Processing Pipeline
+Raw data is transformed into "ML-Ready" assets via:
+- **MTCNN/MediaPipe**: For precision face alignment.
+- **Background Normalization**: Removing noisy studio backgrounds to focus on facial features.
+- **Resolution Upscaling**: Using ESRGAN to ensure training pairs are high-definition.
 
 ---
 
@@ -154,4 +189,3 @@ The project is uniquely optimized for **4GB VRAM** users:
 
 ---
 *Developed by the **GUNI Research Intern Team***
-*Technical Infrastructure by **Antigravity AI***
