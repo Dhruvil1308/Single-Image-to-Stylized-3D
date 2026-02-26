@@ -144,18 +144,36 @@ def generate_cartoon(input_img):
 # ─────────────────────────────────────────────────────────────
 
 def generate_3d(input_img):
-    """Generate a 3D avatar model with downloadable files."""
+    """Generate a 3D avatar model with multi-view synthesis and texture composition."""
     if input_img is None:
-        return None, None, None, None, "Please upload a photo first."
+        return None, None, None, None, None, "Please upload a photo first."
 
     t_start = time.time()
     aligned, msg = preprocess_face(input_img)
     if aligned is None:
-        return None, None, None, None, msg
+        return None, None, None, None, None, msg
 
-    print("Generating 3D Avatar...")
+    # Step 1: Generate 15+ multi-angle views
+    print("="*60)
+    print("STEP 1/3: Multi-View Synthesis (15+ angles)...")
+    print("="*60)
     views = mv_synthesis.generate_views(aligned)
-    mesh = fitter.fit(views, flame)
+    n_views = len(views)
+    t_views = time.time() - t_start
+
+    # Get angle metadata for texture composition
+    views_with_angles = mv_synthesis.get_cached_views_with_angles()
+
+    # Step 2: Fit mesh with multi-view texture
+    print("="*60)
+    print("STEP 2/3: 3D Mesh Reconstruction + Multi-View Texture...")
+    print("="*60)
+    mesh = fitter.fit(views, flame, views_with_angles=views_with_angles)
+
+    # Step 3: Export
+    print("="*60)
+    print("STEP 3/3: Exporting 3D Model...")
+    print("="*60)
     exporter.export_3d(mesh)
     elapsed = time.time() - t_start
 
@@ -165,15 +183,26 @@ def generate_3d(input_img):
     n_verts = len(mesh.vertices)
     n_faces = len(mesh.faces)
     has_tex = getattr(mesh.visual, 'kind', 'none') == 'texture'
-    tex_info = "UV-Textured" if has_tex else "Vertex Colors"
+    tex_info = "Multi-View UV-Textured" if has_tex else "Vertex Colors"
+
+    # Build gallery data: list of (image, label) for Gradio Gallery
+    gallery_data = []
+    if views_with_angles:
+        for img, yaw, pitch in views_with_angles:
+            label = f"Yaw {yaw:+.0f}° Pitch {pitch:+.0f}°"
+            gallery_data.append((img, label))
+    else:
+        for i, v in enumerate(views):
+            gallery_data.append((v, f"View {i+1}"))
 
     status = (
         f"✅ 3D Avatar generated in {elapsed:.1f}s\n"
+        f"Views Synthesized: {n_views} | View Generation: {t_views:.1f}s\n"
         f"Vertices: {n_verts:,} | Faces: {n_faces:,} | {tex_info}\n"
         f"Formats: OBJ, GLB (Download below)"
     )
 
-    return views[0], glb_path, glb_path, obj_path, status
+    return gallery_data, views[0], glb_path, glb_path, obj_path, status
 
 
 def update_customization(nose, jaw, eye, emotion):
@@ -456,8 +485,9 @@ with gr.Blocks(
             gr.Markdown("### 3D Avatar Generation")
 
         gr.Markdown(
-            "Generate your 3D avatar, view it in the interactive viewer below, "
-            "and download in GLB or OBJ format.",
+            "Generate your 3D avatar using **15+ multi-angle view synthesis**. "
+            "The system creates left, right, semi-profile, top, and back-of-head views "
+            "to produce a high-resolution 3D model with complete texture coverage.",
             elem_classes="section-desc"
         )
 
@@ -465,14 +495,14 @@ with gr.Blocks(
             # ── Left column : Controls ──
             with gr.Column(scale=1):
                 generate_3d_btn = gr.Button(
-                    "Generate 3D Avatar",
+                    "Generate 3D Avatar (15+ Views)",
                     variant="primary",
                     elem_classes="gen-btn"
                 )
                 avatar_3d_status = gr.Textbox(
-                    label="Status",
+                    label="Pipeline Status",
                     interactive=False,
-                    lines=3,
+                    lines=4,
                     elem_classes="status-box"
                 )
 
@@ -513,11 +543,29 @@ with gr.Blocks(
             # ── Right column : Preview & 3D Viewer ──
             with gr.Column(scale=2):
                 avatar_preview = gr.Image(
-                    label="Face Preview", height=250
+                    label="Front Face Preview", height=220
                 )
                 model_viewer = gr.Model3D(
-                    label="3D Model Viewer", height=420
+                    label="3D Model Viewer", height=400
                 )
+
+        # ── Multi-View Gallery (below the main row) ──
+        gr.Markdown(
+            "#### 🔄 Synthesized Multi-Angle Views",
+            elem_classes="step-label"
+        )
+        gr.Markdown(
+            "The views below were generated from your single photo — "
+            "they are used to create the 3D texture map.",
+            elem_classes="section-desc"
+        )
+        multiview_gallery = gr.Gallery(
+            label="Multi-View Synthesis (15+ angles)",
+            columns=5,
+            rows=3,
+            height=360,
+            object_fit="contain",
+        )
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     #  Event Handlers
@@ -562,12 +610,13 @@ with gr.Blocks(
         outputs=[cartoon_output, cartoon_status]
     )
 
-    # 3D generation
+    # 3D generation (with multi-view gallery)
     generate_3d_btn.click(
         fn=generate_3d,
         inputs=[input_image],
         outputs=[
-            avatar_preview, model_viewer,
+            multiview_gallery, avatar_preview,
+            model_viewer,
             download_glb, download_obj,
             avatar_3d_status
         ]

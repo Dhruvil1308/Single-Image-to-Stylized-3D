@@ -32,11 +32,13 @@ graph TD
     D2 --> E[Final 2D Avatar PNG]
 
     C -->|3D Avatar| F[MorphableDiffusion Multi-View Synthesis]
-    F --> F1[7-View Images Generated]
-    F1 --> G[FLAME Mesh Fitting]
+    F --> F1["15+ Multi-Angle Views Generated"]
+    F1 --> F2["Left/Right 30°/45°/60°/90° + Top + Back"]
+    F2 --> G[BFM Mesh Fitting]
     G --> G1[Shape + Expression Parameter Optimization]
-    G1 --> G2[UV Texture Baking]
-    G2 --> H[Final 3D Model .OBJ / .GLB]
+    G1 --> G2["Multi-View Texture Composition"]
+    G2 --> G3["Angle-Weighted UV Blending"]
+    G3 --> H[Final 3D Model .OBJ / .GLB]
 ```
 
 ---
@@ -62,13 +64,20 @@ graph TD
 │   ├── __init__.py
 │   ├── models/
 │   │   ├── anime_gen.py       # 2D anime generation pipeline
-│   │   ├── face_recon.py      # Face reconstruction model wrapper
+│   │   ├── face_recon.py      # 3DDFA_V2 + BFM face reconstruction
+│   │   ├── morphable_diffusion.py # Multi-view synthesis orchestrator
 │   │   └── flame_wrapper.py   # FLAME parametric model interface
+│   ├── synthesis/
+│   │   ├── __init__.py
+│   │   └── multi_view_generator.py  # 15+ view diffusion/geometric engine
 │   ├── recon/
 │   │   ├── __init__.py
-│   │   └── mesh_fit.py        # FLAME mesh fitting & optimization loop
+│   │   ├── mesh_fit.py        # BFM mesh fitting + multi-view texture
+│   │   ├── texture_composer.py # Multi-view UV texture blending
+│   │   └── exporter.py        # OBJ/GLB export
 │   └── preprocess/
-│       └── ...                # Face detection, alignment utilities
+│       ├── extractor.py       # Face detection & alignment (MediaPipe)
+│       └── segment.py         # Background removal
 ├── data/
 │   ├── raw/                   # Raw IMFDB images (git-ignored)
 │   └── processed/             # Aligned training images (git-ignored)
@@ -110,8 +119,13 @@ Iterative optimization loop to fit the FLAME mesh to 2D landmarks:
 3. **Regularization** — Ensure biological plausibility using FLAME's learned priors.
 4. **UV Baking** — Project original image texture onto the final mesh.
 
-### 3. Multi-View Synthesis
-Uses **MorphableDiffusion** to generate 7 consistent views from a single input image before mesh reconstruction — dramatically improving geometric accuracy.
+### 3. Multi-View Synthesis (15+ Angles)
+The system utilizes **GAN-based and diffusion-based neural networks** to generate more than **15 multi-angle facial images** from a single input, including left, right, semi-profile views (30°/45°/60°/90°), top angles, bottom, and **complete backside head textures**. These synthesized views are intelligently combined to produce a **high-resolution texture map** used for 3D reconstruction.
+
+*   **View Angles**: Front, ±30°, ±45°, ±60°, ±90°, Top, Top-Left, Top-Right, Bottom, Back-Left, Back-Right, Back
+*   **Identity Preservation**: Low denoising strength for near-frontal views, progressive increase for extreme angles
+*   **Texture Composition**: Angle-based confidence weighting with per-vertex normal dot-product visibility
+*   **CPU Fallback**: Geometric perspective warps with simulated directional lighting when GPU is unavailable
 
 ---
 
