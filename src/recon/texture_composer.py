@@ -63,6 +63,12 @@ class TextureComposer:
         # Compute per-vertex normals for visibility determination
         normals = self._compute_vertex_normals(vertices_3xN, faces)
 
+        # Center of face (approximate based on vertices)
+        cx = np.mean(vertices_3xN[0, :])
+        cy = np.mean(vertices_3xN[1, :])
+        cz = np.mean(vertices_3xN[2, :])
+        center = np.array([[cx], [cy], [cz]])
+
         # Initialize texture accumulation buffers
         tex_color = np.zeros((tex_size, tex_size, 3), dtype=np.float64)
         tex_weight = np.zeros((tex_size, tex_size), dtype=np.float64)
@@ -87,10 +93,16 @@ class TextureComposer:
             if np.sum(valid) == 0:
                 continue
 
+            # ROTATION CORRECTION
+            # Rotate the 3D vertices by the camera angle so they project correctly
+            # into the synthesized 2D image coordinates limits.
+            R = self._get_rotation_matrix(yaw_deg, pitch_deg)
+            rot_verts = R @ (vertices_3xN - center) + center
+
             # Sample colors from this view image
             view_arr = np.array(view_img.convert("RGB").resize((w, h), Image.LANCZOS))
-            xs = np.clip(vertices_3xN[0, :], 0, w - 1).astype(int)
-            ys = np.clip(vertices_3xN[1, :], 0, h - 1).astype(int)
+            xs = np.clip(rot_verts[0, :], 0, w - 1).astype(int)
+            ys = np.clip(rot_verts[1, :], 0, h - 1).astype(int)
             vert_colors = view_arr[ys, xs, :]  # (N, 3) RGB
 
             # Accumulate weighted colors into UV texture
@@ -158,6 +170,27 @@ class TextureComposer:
             -np.cos(yaw) * np.cos(pitch),
         ])
         return direction / (np.linalg.norm(direction) + 1e-10)
+
+    def _get_rotation_matrix(self, yaw_deg: float, pitch_deg: float) -> np.ndarray:
+        """Create a 3D rotation matrix for yaw and pitch."""
+        yaw = np.radians(yaw_deg)
+        pitch = np.radians(pitch_deg)
+        
+        # 3DDFA_V2 space: X right, Y down, Z forward
+        # Yaw rotates around Y axis, Pitch rotates around X axis
+        Ry = np.array([
+            [np.cos(yaw), 0, np.sin(yaw)],
+            [0, 1, 0],
+            [-np.sin(yaw), 0, np.cos(yaw)]
+        ])
+        
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(pitch), -np.sin(pitch)],
+            [0, np.sin(pitch), np.cos(pitch)]
+        ])
+        
+        return Ry @ Rx
 
     def _compute_view_confidence(
         self, normals: np.ndarray, view_dir: np.ndarray

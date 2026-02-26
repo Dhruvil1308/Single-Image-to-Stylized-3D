@@ -549,23 +549,33 @@ with gr.Blocks(
                     label="3D Model Viewer", height=400
                 )
 
-        # ── Multi-View Gallery (below the main row) ──
+        # ── Multi-View Slider (below the main row) ──
         gr.Markdown(
             "#### 🔄 Synthesized Multi-Angle Views",
             elem_classes="step-label"
         )
         gr.Markdown(
-            "The views below were generated from your single photo — "
-            "they are used to create the 3D texture map.",
+            "Drag the slider to browse the 15+ generated profile and back views "
+            "used to create the 3D texture map.",
             elem_classes="section-desc"
         )
-        multiview_gallery = gr.Gallery(
-            label="Multi-View Synthesis (15+ angles)",
-            columns=5,
-            rows=3,
-            height=360,
-            object_fit="contain",
-        )
+        
+        synthesized_views_state = gr.State([])
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                view_slider = gr.Slider(
+                    minimum=1, maximum=16, step=1, value=1, 
+                    label="Select View Angle",
+                    interactive=True
+                )
+                view_label = gr.Markdown("**Current View**: Front")
+            with gr.Column(scale=2):
+                view_preview = gr.Image(
+                    label="Synthesized View", 
+                    height=300,
+                    interactive=False
+                )
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     #  Event Handlers
@@ -610,16 +620,40 @@ with gr.Blocks(
         outputs=[cartoon_output, cartoon_status]
     )
 
-    # 3D generation (with multi-view gallery)
+    # 3D generation (with multi-view slider update)
+    def update_view_slider(index, views_data):
+        idx = int(index) - 1
+        if not views_data or idx < 0 or idx >= len(views_data):
+            return None, "**Current View**: None"
+        img, label = views_data[idx]
+        return img, f"**Current View**: {label}"
+
+    def on_3d_generated(views_data):
+        if not views_data:
+            return None, "**Current View**: None", gr.update(minimum=1, maximum=1, value=1)
+        max_val = len(views_data)
+        img, label = views_data[0]
+        return img, f"**Current View**: {label}", gr.update(minimum=1, maximum=max_val, value=1)
+
     generate_3d_btn.click(
         fn=generate_3d,
         inputs=[input_image],
         outputs=[
-            multiview_gallery, avatar_preview,
+            synthesized_views_state, avatar_preview,
             model_viewer,
             download_glb, download_obj,
             avatar_3d_status
         ]
+    ).then(
+        fn=on_3d_generated,
+        inputs=[synthesized_views_state],
+        outputs=[view_preview, view_label, view_slider]
+    )
+
+    view_slider.change(
+        fn=update_view_slider,
+        inputs=[view_slider, synthesized_views_state],
+        outputs=[view_preview, view_label]
     )
 
     # 3D customization
