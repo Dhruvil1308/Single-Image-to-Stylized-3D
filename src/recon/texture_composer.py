@@ -9,8 +9,8 @@ weighting to produce a seamless, high-resolution texture.
 
 import numpy as np
 import cv2
-from PIL import Image
 from typing import List, Tuple, Optional
+from PIL import Image, ImageEnhance
 
 
 class TextureComposer:
@@ -73,13 +73,15 @@ class TextureComposer:
         tex_color = np.zeros((tex_size, tex_size, 3), dtype=np.float64)
         tex_weight = np.zeros((tex_size, tex_size), dtype=np.float64)
 
-        # UV pixel positions for all vertices
-        u_px = np.clip((uv_coords[:, 0] * (tex_size - 1)).astype(int), 0, tex_size - 1)
-        v_px = np.clip(((1.0 - uv_coords[:, 1]) * (tex_size - 1)).astype(int), 0, tex_size - 1)
-
         h, w = img_shape
 
+        # Get front view brightness for normalization
+        front_brightness = self._get_avg_brightness(views_with_angles[0][0]) if views_with_angles else 1.0
+
         for view_img, yaw_deg, pitch_deg in views_with_angles:
+            # Normalize view brightness to match front
+            view_img = self._normalize_brightness(view_img, front_brightness)
+            
             # Compute view direction vector from angles
             view_dir = self._angle_to_direction(yaw_deg, pitch_deg)
 
@@ -108,7 +110,8 @@ class TextureComposer:
             # Accumulate weighted colors into UV texture
             for i in range(n_verts):
                 if valid[i] and confidence[i] > 0:
-                    weight = confidence[i] ** 2  # square for sharper falloff
+                    # Higher power (3.0) for even smoother, localized blending transitions
+                    weight = confidence[i] ** 3.0
                     tex_color[v_px[i], u_px[i]] += vert_colors[i].astype(np.float64) * weight
                     tex_weight[v_px[i], u_px[i]] += weight
 
@@ -218,7 +221,21 @@ class TextureComposer:
             if mask.all():
                 break
 
-        return tex
+    def _get_avg_brightness(self, pil_img: Image.Image) -> float:
+        """Compute average brightness of a PIL image."""
+        arr = np.array(pil_img.convert("L"))
+        return np.mean(arr)
+
+    def _normalize_brightness(self, pil_img: Image.Image, target_val: float) -> Image.Image:
+        """Adjust image brightness to match target value."""
+        current_val = self._get_avg_brightness(pil_img)
+        if current_val < 1: return pil_img
+        factor = target_val / current_val
+        # Limit adjustment to prevent extreme washouts
+        factor = np.clip(factor, 0.7, 1.3)
+        
+        enhancer = ImageEnhance.Brightness(pil_img)
+        return enhancer.enhance(factor)
 
     def _single_view_fallback(
         self,

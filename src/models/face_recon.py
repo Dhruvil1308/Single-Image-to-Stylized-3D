@@ -30,6 +30,7 @@ from utils.tddfa_util import _parse_param, similar_transform, _to_ctype
 from bfm.bfm import BFMModel
 from bfm.bfm_onnx import convert_bfm_to_onnx
 from utils.onnx import convert_to_onnx
+from src.recon.mesh_refiner import MeshRefiner
 
 _abs = lambda fn: os.path.join(TDDFA_DIR, fn)
 
@@ -107,6 +108,9 @@ class FaceReconstructor:
         self.current_param = None
         self.current_roi_box = None
         self.current_img = None
+
+        # ── Mesh Refinement (for perfection) ──
+        self.refiner = MeshRefiner(subdivision_levels=1, smooth_iterations=10)
 
         dt = time.time() - t0
         print(f"FaceReconstructor initialized in {dt:.1f}s (BFM + ONNX)")
@@ -308,6 +312,10 @@ class FaceReconstructor:
         print("  [4/4] Baking UV texture...")
         mesh = self._build_trimesh(vertices, img_bgr)
 
+        # 5. Perfection (Smoothing & Subdivision)
+        print("  [5/5] Refining mesh geometry...")
+        mesh = self.refiner.refine(mesh)
+
         dt = time.time() - t0
         print(f"  ✅ 3D reconstruction complete in {dt:.1f}s")
         return mesh
@@ -365,6 +373,10 @@ class FaceReconstructor:
         vertices = similar_transform(vertices, self.current_roi_box, self.size)
 
         mesh = self._build_trimesh(vertices, self.current_img)
+        
+        # Apply refinement to modified mesh
+        mesh = self.refiner.refine(mesh)
+        
         return mesh
 
 

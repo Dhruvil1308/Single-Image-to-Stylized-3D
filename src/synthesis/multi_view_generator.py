@@ -76,11 +76,11 @@ class MultiViewGenerator:
     #  Pipeline Loading
     # ──────────────────────────────────────
     def _load_pipeline(self):
-        """Load Stable Diffusion img2img pipeline for view synthesis."""
+        """Load Stable Diffusion ControlNet pipeline for view synthesis."""
         if self._pipe_loaded:
             return self.pipe is not None
 
-        self._pipe_loaded = True  # prevent repeated attempts
+        self._pipe_loaded = True
 
         if self.device == "cpu":
             print("  [!] CPU mode - using geometric fallback (no diffusion)")
@@ -88,14 +88,26 @@ class MultiViewGenerator:
 
         try:
             import torch
-            from diffusers import StableDiffusionImg2ImgPipeline, DPMSolverMultistepScheduler
+            from diffusers import (
+                StableDiffusionControlNetImg2ImgPipeline, 
+                ControlNetModel,
+                DPMSolverMultistepScheduler
+            )
 
             model_id = "Lykon/AnyLoRA"
-            print(f"  Loading SD pipeline ({model_id}) for view synthesis...")
+            controlnet_id = "lllyasviel/sd-controlnet-canny"
+            
+            print(f"  Loading ControlNet ({controlnet_id})...")
+            controlnet = ControlNetModel.from_pretrained(
+                controlnet_id, torch_dtype=torch.float16
+            )
+            
+            print(f"  Loading SD pipeline ({model_id}) with ControlNet...")
             t0 = time.time()
 
-            self.pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
+            self.pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
                 model_id,
+                controlnet=controlnet,
                 torch_dtype=torch.float16,
                 safety_checker=None,
             )
@@ -103,12 +115,12 @@ class MultiViewGenerator:
                 self.pipe.scheduler.config
             )
 
-            # VRAM optimization for 4GB GPUs
+            # VRAM optimization
             self.pipe.enable_model_cpu_offload()
             self.pipe.enable_attention_slicing("max")
             self.pipe.enable_vae_tiling()
 
-            print(f"  [OK] Pipeline loaded in {time.time() - t0:.1f}s")
+            print(f"  [OK] ControlNet Pipeline loaded in {time.time() - t0:.1f}s")
             return True
 
         except Exception as e:
@@ -141,16 +153,21 @@ class MultiViewGenerator:
         input_img = self._apply_geometric_hint(face_image, spec)
         input_img = input_img.convert("RGB").resize((512, 512), Image.LANCZOS)
 
+        # Generate ControlNet condition (Canny edges of the hint)
+        control_image = self._get_canny_edges(input_img)
+
         try:
             torch.cuda.empty_cache()
             with torch.inference_mode():
                 result = self.pipe(
                     prompt=prompt,
                     image=input_img,
+                    control_image=control_image,
                     strength=spec.strength,
-                    guidance_scale=7.0,
+                    controlnet_conditioning_scale=0.8,
+                    guidance_scale=7.5,
                     negative_prompt=negative_prompt,
-                    num_inference_steps=15,
+                    num_inference_steps=20, # increased for perfection
                 ).images[0]
             return result
 
@@ -160,6 +177,21 @@ class MultiViewGenerator:
                 torch.cuda.empty_cache()
                 return self._generate_view_geometric(face_image, spec)
             raise
+
+    def _get_canny_edges(self, image: Image.Image) -> Image.Image:
+        """Extract Canny edges from image for ControlNet guidance."""
+        arr = np.array(image)
+        gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+        
+        # Blur slightly to reduce noise in edges
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        
+        # Detect edges
+        edges = cv2.Canny(blurred, 100, 200)
+        
+        # Convert back to 3-channel RGB for ControlNet
+        edges_rgb = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+        return Image.fromarray(edges_rgb)
 
     # ──────────────────────────────────────
     #  Geometric Fallback View Synthesis
