@@ -173,4 +173,3 @@ python app.py
 
 ---
 *Developed with ❤️ by the GUNI Research Intern Team*
-*Maintained by Antigravity AI — Version 2.0.1 Perfection Phase*
