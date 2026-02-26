@@ -1,221 +1,153 @@
-# 🇮🇳 Indian Avatar AI: Single Image to Stylized 3D
+# 🇮🇳 Indian Avatar AI: Single Image to Stylized 3D (v2.0)
 
-> **Research-grade pipeline for generating high-fidelity, stylized 2D & 3D avatars from a single face photo — built specifically for the Indian demographic.**
-
----
-
-## 🌟 Introduction
-
-The **Indian Avatar AI** solves the "representation gap" in global AI models by focusing on Indian facial morphology, diverse skin tones, and cultural aesthetics.
-
-The system provides a seamless experience for:
-*   **2D Anime Stylization** — High-fidelity artistic avatars with cultural trigger-word LoRA (`indianface`).
-*   **3D Avatar Reconstruction** — Geometry-accurate, FLAME-based 3D head models ready for metaverse/gaming.
-*   **Interactive Sliders** — Real-time control over FLAME shape/expression parameters.
+> **Research-grade pipeline for generating high-fidelity, stylized 3D avatars from a single face photo — optimized for Indian facial morphology, cultural aesthetics, and premium geometric smoothness.**
 
 ---
 
-## 🏗️ System Architecture & Workflow
+## 🌟 Overview
+
+The **Indian Avatar AI (Perfection v2.0)** represents a state-of-the-art approach to 3D facial reconstruction. By combining **ControlNet-guided View Synthesis**, **BFM Morphable Models**, and **Advanced Mesh Refinement**, the system transforms a single 2D photograph into a high-resolution, animatable 3D model with seamless textures and professional-grade surface quality.
+
+### 🚀 Perfection v2.0 Highlights
+*   **Geometric Smoothing**: Laplacian filtering eliminates "faceted" artifacts for a premium, curved surface.
+*   **High-Res Mesh**: Loop-style subdivision increases vertex density for localized refinement.
+*   **Structural Fidelity**: ControlNet-Canny forces AI-synthesized side views to strictly obey the 3D head geometry.
+*   **Seamless Textures**: Automated brightness normalization and cubic weighting ensure invisible transitions between views.
+
+---
+
+## 🏗️ Technical Pipeline & Workflows
+
+### 1. High-Level System Architecture
+The system follows a modular "Reconstruct-Synthesize-Refine" workflow:
 
 ```mermaid
 graph TD
-    A[User Uploads Photo] --> B{Pre-processing}
-    B --> B1[Face Detection & Landmark Extraction]
-    B --> B2[Facial Alignment & Normalization]
-    B --> B3[Background Removal / Segmentation]
+    %% Input Layer
+    IN[Single Face Photo] --> PRE[Pre-processing]
+    
+    subgraph "Core AI Pipeline"
+    PRE --> DET[Face Detection & Landmark Extraction]
+    DET --> RECON[3DMM Parameter Regression - 3DDFA_V2]
+    RECON --> BASE_MESH[Initial BFM Mesh Generation]
+    
+    %% Multi-View Synthesis
+    BASE_MESH --> SYNTH[ControlNet-Canny View Synthesis]
+    SYNTH --> VIEWS["16+ Synthesized Angles - Side/Top/Back"]
+    
+    %% Refinement Layer
+    VIEWS --> TEX[Advanced UV Texture Composition]
+    BASE_MESH --> MESH_REF[Mesh Refinement Module]
+    MESH_REF --> SUBDIV[Subdivision & Laplacian Smoothing]
+    end
+    
+    %% Export Layer
+    TEX --> FINAL[Final High-Fidelity 3D Avatar]
+    SUBDIV --> FINAL
+    FINAL --> OUT[GLB / OBJ / PLY Export]
 
-    B3 --> C{Generation Path}
+    style IN fill:#f9f,stroke:#333,stroke-width:2px
+    style FINAL fill:#00ff00,stroke:#333,stroke-width:4px
+```
 
-    C -->|2D Anime| D[Stable Diffusion + indianface LoRA]
-    D --> D1[Identity Preservation via IP-Adapter]
-    D1 --> D2[Style Injection — Realistic / Cartoon / Stylized]
-    D2 --> E[Final 2D Avatar PNG]
+### 2. Multi-View ML Workflow (ControlNet Detail)
+Unlike standard generative models, our **Perfection v2.0** engine uses geometric structural hints to prevent identity drift at extreme angles.
 
-    C -->|3D Avatar| F[MorphableDiffusion Multi-View Synthesis]
-    F --> F1["15+ Multi-Angle Views Generated"]
-    F1 --> F2["Left/Right 30°/45°/60°/90° + Top + Back"]
-    F2 --> G[BFM Mesh Fitting]
-    G --> G1[Shape + Expression Parameter Optimization]
-    G1 --> G2["Multi-View Texture Composition"]
-    G2 --> G3["Angle-Weighted UV Blending"]
-    G3 --> H[Final 3D Model .OBJ / .GLB]
+```mermaid
+sequenceDiagram
+    participant P as Photo
+    participant G as Geometric Warp
+    participant C as ControlNet-Canny
+    participant SD as Stable Diffusion XL
+    participant T as Texture Blender
+
+    P->>G: Apply 3D perspective warp (Yaw/Pitch)
+    G->>C: Extract edge structural hint (Canny)
+    C->>SD: Guide synthesis with geometric edges
+    SD->>T: Output identity-preserved side view
+    Note over SD,T: Repeats for 16 specific angles
 ```
 
 ---
 
-## 📁 Project Structure
+## 📁 Repository Structure
 
-```
+```text
 3d_model/
-├── app.py                     # Gradio UI — single entry point
-├── requirements.txt           # Pip dependencies
-├── constraints.txt            # Version constraints for compatibility
-├── scripts/
-│   ├── setup_venv.py          # Auto-installs all dependencies
-│   ├── download_imfdb.py      # Downloads IMFDB dataset
-│   ├── preprocess_imfdb.py    # MediaPipe face alignment & normalization
-│   ├── train_lora.py          # LoRA fine-tuning with 8-bit optimizer
-│   ├── prepare_lora_metadata.py # Builds dataset_info.json for training
-│   ├── fix_dependencies.py    # Resolves Windows-specific package conflicts
-│   ├── verify_final_lora.py   # Validates trained LoRA weights
-│   ├── inspect_unet.py        # Inspects UNet architecture layers
-│   └── test_gpu.py            # CUDA/GPU diagnostic tool
+├── app.py                     # Main Gradio Interface (Slider-based UI)
 ├── src/
-│   ├── __init__.py
 │   ├── models/
-│   │   ├── anime_gen.py       # 2D anime generation pipeline
-│   │   ├── face_recon.py      # 3DDFA_V2 + BFM face reconstruction
-│   │   ├── morphable_diffusion.py # Multi-view synthesis orchestrator
-│   │   └── flame_wrapper.py   # FLAME parametric model interface
+│   │   ├── face_recon.py      # 3DDFA_V2 + BFM integration logic
+│   │   └── morphable_diffusion.py # Pipeline orchestrator
 │   ├── synthesis/
-│   │   ├── __init__.py
-│   │   └── multi_view_generator.py  # 15+ view diffusion/geometric engine
+│   │   └── multi_view_generator.py # ControlNet-Canny Synthesis Engine
 │   ├── recon/
-│   │   ├── __init__.py
-│   │   ├── mesh_fit.py        # BFM mesh fitting + multi-view texture
-│   │   ├── texture_composer.py # Multi-view UV texture blending
-│   │   └── exporter.py        # OBJ/GLB export
+│   │   ├── mesh_refiner.py    # NEW: Subdivision & Laplacian Smoothing (v2.0)
+│   │   ├── texture_composer.py # NEW: Brightness Norm & Cubic Blending (v2.0)
+│   │   └── mesh_fit.py        # BFM parameter optimization
 │   └── preprocess/
-│       ├── extractor.py       # Face detection & alignment (MediaPipe)
-│       └── segment.py         # Background removal
-├── data/
-│   ├── raw/                   # Raw IMFDB images (git-ignored)
-│   └── processed/             # Aligned training images (git-ignored)
-└── assets/                    # UI assets (git-ignored)
+│       ├── extractor.py       # Landmark-based alignment
+│       └── segment.py         # Multi-layer background removal
+├── scripts/
+│   ├── setup_venv.py          # Auto-environment setup
+│   ├── train_lora.py          # Cultural LoRA training (indianface)
+│   └── verify_final_lora.py   # Regression tests for AI weights
+└── README.md
 ```
 
 ---
 
-## 🛠️ Tech Stack & Libraries
+## 🔬 Core Algorithms
 
-### Core Architecture
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Language** | Python 3.11 | Optimized for library compatibility |
-| **AI Framework** | PyTorch 2.x + CUDA 12.1 | GPU-accelerated training & inference |
-| **Distribution** | HuggingFace `diffusers`, `transformers`, `accelerate` | Model loading & pipelines |
-| **Generative AI** | Stable Diffusion (AnyLoRA) | Base image synthesis engine |
-| **Optimization** | PEFT (LoRA) | Cultural adaptation without full retraining |
-| **Computer Vision** | MediaPipe | Real-time facial mesh & iris tracking |
-| **3D Geometry** | FLAME Model | SOTA morphable face model |
-| **UI** | Gradio 5.x | Reactive web interface with sliders |
-| **Backend** | Uvicorn / FastAPI | Local serving |
+### 🌀 1. Geometry Perfection (MeshRefiner)
+To achieve the "High Improvement" look, the `MeshRefiner` applies:
+*   **Loop Subdivision**: Interstitial vertices are added to smooth out the silhoutte.
+*   **Laplacian Filtering**: Computes the mean coordinates of neighboring vertices to reduce high-frequency geometric noise without losing volume.
 
----
+### 🎨 2. Seamless Texture Blending
+The `TextureComposer` solves the "ghosting" issue common in side-projection:
+*   **3D Rotation Matrix**: Projecting vertices into `Ry @ Rx` space *before* sampling 2D pixels.
+*   **Cubic Weighting**: `weight = confidence ** 3.0` ensures that only the most "front-facing" cameras contribute to a specific region, eliminating overlap blur.
+*   **Luminance Normalization**: Every synthesized view's average brightness is matched to the original photo's histogram to prevent visible seams.
 
-## 🤖 Algorithms & Training
-
-### 1. Fine-tuning with LoRA (Low-Rank Adaptation)
-Instead of training from scratch, **LoRA** injects "Indian intelligence" into the base diffusion model:
-*   **Trigger Word**: `indianface`
-*   **Dataset**: 25,000+ pre-processed images from IMFDB
-*   **Focus**: Correct skin tone rendering, traditional clothing (Sari/Kurta), jewelry (Nose pins/Jhumkas)
-*   **Optimizer**: AdamW 8-bit for 4GB VRAM compatibility
-
-### 2. FLAME Mesh Fitting Pipeline
-Iterative optimization loop to fit the FLAME mesh to 2D landmarks:
-1. **Landmark Projection** — Translate 2D MediaPipe points into 3D space.
-2. **Loss Function** — Minimize vertex-to-landmark distance + perceptual loss.
-3. **Regularization** — Ensure biological plausibility using FLAME's learned priors.
-4. **UV Baking** — Project original image texture onto the final mesh.
-
-### 3. Multi-View Synthesis (15+ Angles)
-The system utilizes **GAN-based and diffusion-based neural networks** to generate more than **15 multi-angle facial images** from a single input, including left, right, semi-profile views (30°/45°/60°/90°), top angles, bottom, and **complete backside head textures**. These synthesized views are intelligently combined to produce a **high-resolution texture map** used for 3D reconstruction.
-
-*   **View Angles**: Front, ±30°, ±45°, ±60°, ±90°, Top, Top-Left, Top-Right, Bottom, Back-Left, Back-Right, Back
-*   **Identity Preservation**: Low denoising strength for near-frontal views, progressive increase for extreme angles
-*   **Texture Composition**: Angle-based confidence weighting with per-vertex normal dot-product visibility
-*   **CPU Fallback**: Geometric perspective warps with simulated directional lighting when GPU is unavailable
+### 🤖 3. ControlNet View Synthesis
+The engine generates 16 views (±30°, ±45°, ±60°, ±90°, Top, Bottom, Back):
+*   **Conditioning**: Uses `lllyasviel/sd-controlnet-canny`.
+*   **Sampling**: 20-step DPM++ Solver for crisp details.
+*   **Prompting**: Dynamic prompts like `side view of a person, head turned, back of head view` combined with the `indianface` cultural LoRA.
 
 ---
 
-## 📊 Dataset: IMFDB (Indian Movie Face Database)
+## 🛠️ Tech Stack
 
-*   **Extraction**: `scripts/download_imfdb.py` interfaces with academic CDNs.
-*   **Preprocessing**: `scripts/preprocess_imfdb.py` uses MediaPipe for square, normalized crops.
-*   **Volume**: 34,000+ raw → 25,000+ clean training samples.
-
----
-
-## ⚠️ Challenges & Solutions
-
-| # | Problem | Solution |
-| :--- | :--- | :--- |
-| 🔴 **4GB VRAM limit** | Diffusion models OOM on low-VRAM GPUs | 8-bit quantization (`bitsandbytes`) + gradient checkpointing + safe-tensors |
-| 🟡 **Windows xformers crash** | Broken binary compatibility on Python 3.11/3.12 | Refactored to PyTorch 2.0 **SDPA** (native, no extra package needed) |
-| 🔵 **Dual-GPU confusion** | Intel iGPU causes PyTorch to pick the wrong device | Explicit `CUDA_VISIBLE_DEVICES=0` + device-aware model loading |
-| 🟢 **LoRA metadata errors** | `dataset_info.json` format mismatch blocking training | `scripts/prepare_lora_metadata.py` auto-generates correct metadata |
+*   **Logic**: Python 3.11 (optimized for `xformers` compatibility)
+*   **DL Framework**: PyTorch 2.1 + CUDA 12.1
+*   **Diffusion**: HuggingFace `diffusers` (SDXL / AnyLoRA)
+*   **3D Ops**: `trimesh`, `scipy`, `onnxruntime-gpu`
+*   **UI**: Gradio 5.x (Custom CSS & Slider-based previews)
 
 ---
 
-## 🖥️ Hardware Requirements
+## 🚀 Getting Started
 
-| Component | Minimum | Recommended |
-| :--- | :--- | :--- |
-| **GPU** | NVIDIA 4GB VRAM (e.g. RTX 3050) | NVIDIA 8GB+ VRAM |
-| **RAM** | 8 GB | 16 GB |
-| **Storage** | 20 GB | 50 GB (for datasets + models) |
-| **CUDA** | 11.8 | 12.1 |
-
-**Memory optimizations used:**
-*   `enable_sequential_cpu_offload()` — reduces VRAM from ~8GB to ~3.2GB
-*   `enable_vae_tiling()` — allows high-res generation on limited memory
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/Dhruvil1308/Single-Image-to-Stylized-3D.git
-cd Single-Image-to-Stylized-3D
-
-# 2. Set up the virtual environment & install all dependencies
+### Installation
+```powershell
 python scripts/setup_venv.py
-
-# 3. Fix any Windows-specific dependency conflicts
-python scripts/fix_dependencies.py
-
-# 4. Download and preprocess the IMFDB dataset
-python scripts/download_imfdb.py
-python scripts/preprocess_imfdb.py
-
-# 5. (Optional) Train your own LoRA
-python scripts/prepare_lora_metadata.py
-python scripts/train_lora.py
-
-# 6. Verify LoRA weights (if trained)
-python scripts/verify_final_lora.py
-
-# 7. Launch the Gradio UI
 python app.py
 ```
 
-Then open [http://localhost:7860](http://localhost:7860) in your browser.
+### Usage
+1.  **Upload**: Provide a clear front-facing photo.
+2.  **Generate**: Click "Generate 3D Avatar".
+3.  **Review**: Use the **Angle Slider** to inspect the 16 synthesized views.
+4.  **Refine**: Modify the BFM Shape/Expression sliders for real-time mesh updates.
+5.  **Export**: Download the `.glb` model for Metaverse integration.
 
 ---
 
-## 🧪 GPU Diagnostics
-
-```bash
-python scripts/test_gpu.py       # Check CUDA availability & VRAM
-python scripts/inspect_unet.py   # Inspect UNet architecture
-```
+## 📄 License & Credits
+Developed by the **GUNI Research Intern Team**. For academic and research use only.
+Based on **3DDFA_V2**, **BFM Core**, and **Stable Diffusion**.
 
 ---
-
-## 📦 Installation Notes
-
-*   Python **3.11** is required (3.12 has xformers incompatibility).
-*   `constraints.txt` pins exact versions to prevent dependency drift.
-*   `third_party/` dependencies are cloned by `setup_venv.py` — not tracked in git.
-
----
-
-## 📄 License
-
-This project is for academic and research purposes. IMFDB dataset usage is subject to its own academic license.
-
----
-
-*Developed by the **GUNI Research Intern Team***
+*Generated by Antigravity AI for Perfection v2.0*

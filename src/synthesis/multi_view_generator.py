@@ -169,6 +169,9 @@ class MultiViewGenerator:
                     negative_prompt=negative_prompt,
                     num_inference_steps=20, # increased for perfection
                 ).images[0]
+            
+            # Perfection v2.0: Crisp Restoration Pass
+            result = self._apply_crisp_filter(result)
             return result
 
         except RuntimeError as e:
@@ -177,6 +180,24 @@ class MultiViewGenerator:
                 torch.cuda.empty_cache()
                 return self._generate_view_geometric(face_image, spec)
             raise
+
+    def _apply_crisp_filter(self, image: Image.Image) -> Image.Image:
+        """Apply sharpening and contrast enhancement for a high-fidelity look."""
+        arr = np.array(image.convert("RGB"))
+        
+        # 1. CLAHE for local contrast enhancement (enhances details)
+        lab = cv2.cvtColor(arr, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l = clahe.apply(l)
+        lab = cv2.merge((l, a, b))
+        arr = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+        
+        # 2. Unsharp Mask for specialized sharpening
+        gaussian = cv2.GaussianBlur(arr, (0, 0), 2.0)
+        arr = cv2.addWeighted(arr, 1.5, gaussian, -0.5, 0)
+        
+        return Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
 
     def _get_canny_edges(self, image: Image.Image) -> Image.Image:
         """Extract Canny edges from image for ControlNet guidance."""
