@@ -17,3 +17,22 @@ build/
 !/assets/.gitkeep
 .vscode/
 .idea/
+
+# Temp files created by AI assistants
+tmpclaude-*
+
+# Large model weights & binaries (download separately)
+/models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# Temporary test images
+temp_input.jpg
+temp_*.jpg
+temp_*.png
+
+# Third-party cloned repos (install via setup script)
+third_party/

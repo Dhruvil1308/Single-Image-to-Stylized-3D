@@ -1,84 +1,156 @@
 import torch
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
 from PIL import Image
-import cv2
 import numpy as np
+import os
+import time
 
 class AnimeGenerator:
     def __init__(self, model_id="Lykon/AnyLoRA", device="cuda" if torch.cuda.is_available() else "cpu"):
         self.device = device
         self.model_id = model_id
-        # In a real environment, we would load the pipeline here.
-        # For this implementation, we'll provide the logic for loading and inference.
+        self.pipe = None
         print(f"Initializing AnimeGenerator with {model_id} on {device}")
         
     def load_pipeline(self):
-        from diffusers import StableDiffusionImg2ImgPipeline
-        print(f"Loading optimized pipeline for 4GB VRAM: {self.model_id}...")
-        self.pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
-            self.model_id, 
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-            safety_checker=None
-        ).to(self.device)
-        
-        if self.device == "cuda":
-            # Enable low VRAM optimizations
-            self.pipe.enable_sequential_cpu_offload() # Massive VRAM savings
-            self.pipe.enable_attention_slicing()      # Save memory during attention
-            self.pipe.enable_vae_tiling()             # Save memory for large images
-            # Disable xformers by default for Windows stability, but keep as option
-            # self.pipe.enable_xformers_memory_efficient_attention() 
-        
-        self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(self.pipe.scheduler.config)
+        """Loads the SD pipeline optimized for 4GB VRAM with fixed LoRA loading."""
+        try:
+            from diffusers import StableDiffusionImg2ImgPipeline, DPMSolverMultistepScheduler
+            
+            print(f"[1/4] Loading model: {self.model_id}...")
+            t0 = time.time()
+            
+            self.pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
+                self.model_id, 
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                safety_checker=None
+            )
+            print(f"[2/4] Model loaded in {time.time()-t0:.0f}s")
+            
+            # Fast scheduler — DPM++ gives good quality in fewer steps
+            self.pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+                self.pipe.scheduler.config
+            )
+            
+            # Load LoRA using PEFT (must be done BEFORE offloading)
+            lora_path = "models/indianface_lora"
+            if os.path.exists(lora_path):
+                print(f"[3/4] Loading Indian Face LoRA...")
+                try:
+                    from peft import PeftModel
+                    self.pipe.unet = PeftModel.from_pretrained(
+                        self.pipe.unet, lora_path
+                    )
+                    self.pipe.unet.eval()
+                    print("       ✅ LoRA loaded successfully!")
+                except Exception as e:
+                    print(f"       ⚠️ LoRA skipped: {e}")
+            else:
+                print("[3/4] No LoRA found, using base model")
 
-        # 3. Load custom Indian Face LoRA if available
-        lora_path = "models/indianface_lora"
-        if os.path.exists(lora_path):
-            print(f"Loading custom Indian Face LoRA from {lora_path}...")
-            try:
-                self.pipe.load_lora_weights(lora_path)
-                print("LoRA weights loaded successfully.")
-            except Exception as e:
-                print(f"Failed to load LoRA: {e}")
-        
-        # Load IP-Adapter for identity preservation
-        # self.pipe.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name="ip-adapter-full-face_sd15.bin")
-        # self.pipe.set_ip_adapter_scale(0.7)
+            # VRAM strategy for 4GB GPU:
+            # model_cpu_offload is MUCH faster than sequential_cpu_offload
+            # It moves entire model components (not individual layers)
+            if self.device == "cuda":
+                self.pipe.enable_model_cpu_offload()
+                self.pipe.enable_attention_slicing("max")
+                self.pipe.enable_vae_tiling()
+                print("[4/4] ✅ VRAM optimized (model offload + attn slicing + VAE tiling)")
+            else:
+                self.pipe = self.pipe.to(self.device)
+                print("[4/4] Running on CPU")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Pipeline FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            self.pipe = None
+            return False
 
-    def generate(self, face_image, style="Stylized", 
-                 negative_prompt="realistic, photo, photograph, real life, low quality, blurry, deformed, grainy"):
+    def generate(self, face_image, style="Stylized", negative_prompt=None):
         
-        if not hasattr(self, 'pipe') or self.pipe is None:
+        if self.pipe is None:
+            print("=" * 40)
+            print("Loading pipeline (first time only)...")
+            print("=" * 40)
             if not self.load_pipeline():
                 return face_image
 
-        # Style mapping for Indian context
-        # 'indianface' is our trigger word for the custom LoRA
+        # Indian-optimized prompts — distinct looks for each style
         style_prompts = {
-            "Realistic": "high-quality professional portrait, realistic indian person, indianface style, sharp focus, 8k uhd",
-            "Cartoon": "disney pixar style cartoon, cute indian character, indianface style, 3d render, claymation aesthetic, big eyes",
-            "Stylized": "stylized digital art, concept art, indianface style, beautiful indian facial features, vibrant colors, artistic illustration"
+            "Stylized": (
+                "stylized digital art portrait, indianface, beautiful indian features, "
+                "vibrant colors, artistic illustration, hand-painted look, "
+                "dramatic lighting, detailed brushstrokes, concept art style"
+            ),
+            "Cartoon": (
+                "pixar 3d cartoon character, indianface, cute indian cartoon face, "
+                "big expressive eyes, smooth 3d render, colorful, fun character design, "
+                "disney pixar style, rounded features, animated movie character"
+            ),
         }
-        
-        base_prompt = style_prompts.get(style, style_prompts["Stylized"])
-        full_prompt = f"{base_prompt}, (indian heritage:1.2), beautiful skin, detailed eyes, masterpiece"
 
-        print(f"Generating stylized avatar ({style}) with prompt: {full_prompt}")
-        
+        prompt = style_prompts.get(style, style_prompts["Stylized"])
+        prompt += ", (indian heritage:1.2), detailed eyes, masterpiece, best quality"
+
+        # Style-specific negative prompts
+        style_negatives = {
+            "Stylized": "photo, photograph, realistic, 3d render, low quality, blurry, deformed",
+            "Cartoon": "realistic, photo, photograph, painting, sketch, low quality, blurry, deformed",
+        }
+        if negative_prompt is None:
+            negative_prompt = style_negatives.get(style, style_negatives["Stylized"])
+
+        # Cartoon uses higher strength for more transformation
+        strength = 0.75 if style == "Cartoon" else 0.65
+
         input_image = face_image.convert("RGB").resize((512, 512))
-        
-        with torch.inference_mode():
-            result = self.pipe(
-                prompt=full_prompt,
-                image=input_image,
-                strength=0.7 if style != "Realistic" else 0.4,
-                guidance_scale=7.5,
-                negative_prompt=negative_prompt,
-                num_inference_steps=20
-            ).images[0]
+
+        print(f"Generating {style} avatar...")
+        t0 = time.time()
+
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
+
+        try:
+            with torch.inference_mode():
+                result = self.pipe(
+                    prompt=prompt,
+                    image=input_image,
+                    strength=strength,
+                    guidance_scale=7.5,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=12
+                ).images[0]
             
+            elapsed = time.time() - t0
+            print(f"✅ Done in {elapsed:.1f}s")
+            
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                print("⚠️ GPU OOM — retrying with smaller image...")
+                torch.cuda.empty_cache()
+                input_small = face_image.convert("RGB").resize((384, 384))
+                with torch.inference_mode():
+                    result = self.pipe(
+                        prompt=prompt,
+                        image=input_small,
+                        strength=0.6,
+                        guidance_scale=6.0,
+                        negative_prompt=negative_prompt,
+                        num_inference_steps=8
+                    ).images[0]
+                result = result.resize((512, 512), Image.LANCZOS)
+                print(f"✅ Done (fallback) in {time.time()-t0:.1f}s")
+            else:
+                print(f"❌ Error: {e}")
+                return face_image
+        
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
         return result
 
 if __name__ == "__main__":
     gen = AnimeGenerator()
-    print("AnimeGenerator logic ready.")
+    print("AnimeGenerator ready.")
