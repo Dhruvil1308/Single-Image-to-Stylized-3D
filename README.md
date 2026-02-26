@@ -1,175 +1,137 @@
-# 🇮🇳 Indian Avatar AI: Single Image to Stylized 3D (v2.0)
+# 🇮🇳 Indian Avatar AI: Single Image to Stylized 3D (Perfection v2.0)
 
-> **The definitive research-grade pipeline for generating high-fidelity, stylized 3D avatars from a single face photo — optimized for Indian facial morphology, cultural aesthetics, and premium geometric smoothness.**
-
----
-
-## 🌟 Executive Summary
-
-**Indian Avatar AI (Perfection v2.0)** is an end-to-end AI framework designed to bridge the "representation gap" in global facial models. While most 3D face generators are trained on Western datasets, this system utilizes specific **Cultural LoRAs (indianface)** and **Advanced Morphable Models (BFM)** to capture the unique geometric and textural nuances of the Indian demographic.
-
-The **Perfection v2.0** update introduces a "High Improvement" tier, utilizing **ControlNet-guided Synthesis** and **Non-Linear Mesh Refinement** to produce smooth, production-ready 3D heads from unconstrained 2D inputs.
+> **A high-fidelity AI framework for creating premium, stylized 3D avatars, specifically engineered to capture the geometric and cultural nuances of the Indian demographic.**
 
 ---
 
-## 🏗️ Technical Architecture & Workflows
+## � Project Objective
+The primary objective of **Indian Avatar AI** is to solve the **"Representation Gap"** in global facial AI. Most state-of-the-art 3D reconstruction models are trained on Western datasets, leading to poor accuracy in predicting Indian facial morphology, skin tones, and cultural aesthetics (jewelry, clothing).
 
-### 1. High-Level System Workflow
-The pipeline operates as a directed acyclic graph (DAG) of specialized neural and geometric nodes:
+This project provides a research-grade pipeline that:
+1.  **Preserves Identity**: Uses landmark-guided 3DMM regression to capture exact facial proportions.
+2.  **Enhances Quality**: Transforms raw "faceted" meshes into smooth, premium surfaces via **Perfection v2.0** algorithms.
+3.  **Cultural Intelligence**: Injects Indian aesthetics into 2D and 3D outputs using specialized **LoRAs**.
+4.  **Hardware Accessibility**: Optimized to run on **4GB VRAM consumer GPUs** (RTX 3050+) without sacrificing results.
+
+---
+
+## 🏗️ System Architecture & Workflows
+
+### 1. The "Reconstruct-Synthesize-Refine" Loop
+The system operates as a data-parallel pipeline where geometry and texture are optimized simultaneously:
 
 ```mermaid
 graph TD
-    %% Input
-    INPUT[Input Portrait] --> PRE[Pre-processing & Alignment]
+    %% Input Layer
+    INPUT[Frontal Portrait] --> ALIGN[Landmark Alignment - MediaPipe]
     
-    subgraph "Spatial Reasoning (Geometric Path)"
-        PRE --> DET[MediaPipe Landmark Extraction]
-        DET --> RECON[3DDFA_V2 Parametric Regression]
-        RECON --> BFM_GEN[BFM Dense Mesh Assembly]
-        BFM_GEN --> REFINE[Perfection v2.0: Mesh Refiner]
-        REFINE --> SMOOTH[Laplacian & Subdivision]
+    subgraph "Phase 1: Geometric Core"
+    ALIGN --> REG[3DDFA_V2 Parameter Regression]
+    REG --> MESH[BFM Morphable Mesh Assembly]
+    MESH --> SMOOTH[Laplacian Smoothing & Subdivision]
     end
     
-    subgraph "Visual Synthesis (Texture Path)"
-        PRE --> SD_GEN[Stable Diffusion XL + indianface LoRA]
-        BFM_GEN --> CN_HINT[ControlNet-Canny Geometric Link]
-        CN_HINT --> SD_GEN
-        SD_GEN --> MV_GEN["16x View Synthesis (±90°, Top, Back)"]
+    subgraph "Phase 2: Visual Synthesis (Perfection v2.0)"
+    ALIGN --> HINT[Geometric Warp Hint]
+    HINT --> CN[ControlNet-Canny Guidance]
+    CN --> DIFF[Stable Diffusion + indianface LoRA]
+    DIFF --> VIEWS["16x Detailed Angle Synthesis"]
     end
     
-    %% Blending
-    SMOOTH --> COMP[Intelligent UV Texture Composer]
-    MV_GEN --> COMP
+    %% Blending Layer
+    SMOOTH --> TEX[Cubic-Weighted Texture Blending]
+    VIEWS --> TEX
     
     %% Output
-    COMP --> FINAL[High-Fidelity 3D Avatar]
-    FINAL --> EXPORT[GLB / OBJ / PLY Export]
+    TEX --> FINAL[Final High-Fidelity 3D Avatar]
+    FINAL --> OUT[GLB / OBJ / PLY]
 
-    style INPUT fill:#f9f,stroke:#333,stroke-width:2px
-    style FINAL fill:#00ff00,stroke:#333,stroke-width:4px
+    style INPUT fill:#f9f,stroke:#333
+    style FINAL fill:#00ff00,stroke:#333,stroke-width:2px
 ```
 
-### 2. The Perfection v2.0 Decision Logic
-Our synthesis engine isn't just "guessing" the back of the head. It follows a multi-stage structural guidance sequence:
+### 2. Multi-View ML logic
+We use a **Structural Guidance Sequence** to ensure identity preservation at 90° and back views.
 
 ```mermaid
 sequenceDiagram
-    participant U as User Image
-    participant G as Geometric Warper
-    participant C as ControlNet (Canny)
-    participant D as Diffusion (AnyLoRA)
-    participant R as Restoration Filter
+    participant P as Photo
+    participant W as Warper
+    participant C as ControlNet
+    participant D as Diffusion
+    participant F as Restoration
 
-    U->>G: Warp image to target Yaw (e.g., 90°)
-    G->>C: Generate Edge Map (Structural Guidance)
-    C->>D: Inject Spatial Constraints
-    D->>R: Raw Synthesized View
-    R->>R: Apply CLAHE & Unsharp Mask
-    Note right of R: Output: Crisp, high-fidelity texture source
+    P->>W: Project to Yaw/Pitch
+    W->>C: Canny structural hint
+    C->>D: Force silhouette adherence
+    D->>F: Raw Synth View
+    F->>F: CLAHE + Unsharp Mask
+    Note over F: Result: Crisp, identity-consistent texture
 ```
 
 ---
 
-## 🔬 Core Algorithms: Technical Deep Dive
+## �️ Technical Stack: The "Why"
 
-### 📐 1. 3DMM Parameter Regression (3DDFA_V2)
-The core geometry is driven by a 62-dimensional vector $\mathbf{p} \in \mathbb{R}^{62}$, regressed via a MobileNet-v3 backbone:
-$$\mathbf{p} = [\underbrace{\phi}_{12}, \underbrace{\alpha}_{40}, \underbrace{\beta}_{10}]$$
-*   **$\phi$ (Pose)**: 12-dim vector for camera rotation, translation, and scale.
-*   **$\alpha$ (Shape)**: 40-dim coefficients for the Basel Face Model (BFM) principal components.
-*   **$\beta$ (Expression)**: 10-dim coefficients representing facial action units.
-
-**Dense Mesh Reconstruction**:
-The vertex positions $\mathbf{S}$ are calculated as:
-$$\mathbf{S} = \mathbf{\bar{S}} + \mathbf{A}_{shape}\alpha + \mathbf{A}_{exp}\beta$$
-Where $\mathbf{\bar{S}}$ is the mean shape, and $\mathbf{A}$ are the bias matrices for shape and expression.
-
-### 🌀 2. Mesh Refinement (Perfection Module)
-To solve the "low-poly" look of raw 3DMMs, we apply:
-*   **Loop-style Subdivision**: Iteratively splits each triangle into four, increasing vertex density by 4x per level.
-*   **Laplacian Smoothing**: A differential operator applied to the mesh:
-    $\Delta v_i = \sum_{j \in N(i)} w_{ij}(v_j - v_i)$
-    This removes high-frequency geometric noise (stair-stepping) while preserving the global volume.
-
-### 🎨 3. ControlNet-Canny Texture Synthesis
-Standard `img2img` often loses identity at side angles. We solve this by extracting Canny edges from a **Geometric Hint** (the warped front photo).
-*   **ControlNet Scale**: $0.8$ (Structural guidance).
-*   **Denoising Strength**: $0.6 - 0.9$ (Increasing as we move from front to back).
-*   **Sharpening**: A final **Unsharp Mask** ($1.5 \times$ radius 2.0) and **CLAHE** (Clip 2.0) are applied to remove diffusion blur.
+| Library | Why We Used It | Role |
+| :--- | :--- | :--- |
+| **3DDFA_V2** | Best trade-off between speed (30+ FPS) and semantic landmark accuracy for unconstrained photos. | Core 3DMM Regression |
+| **BFM 2009** | Broad topological support and compatibility with standard UV maps for face texturing. | Base Morphable Model |
+| **ControlNet-Canny** | Essential to prevent AI "hallucination"—it forces the AI to follow the exact geometric shape of the head. | Structural Synthesis |
+| **Lykon/AnyLoRA** | Extremely stable and photorealistic base model that handles stylization (LoRA) without color drift. | Base Diffusion Model |
+| **Trimesh** | Robust handling of manifold checks, smoothing types, and subdivision without the overhead of Blender. | Geometry Processing |
+| **MediaPipe** | Extremely fast CPU-based face detection and 468-point landmarking. | Pre-processing & ROI |
+| **Gradio 5.x** | Allows for high-interactivity sliders and real-time canvas updates for parameter tuning. | Interactive Frontend |
 
 ---
 
-## 📁 Repository Overview
+## 🔬 ML Pipeline Deep Dive
 
-```text
-3d_model/
-├── app.py                     # Entry point (Gradio UI with dynamic slider)
-├── src/
-│   ├── models/
-│   │   ├── face_recon.py      # 3DDFA_V2 & BFM geometry orchestrator
-│   │   ├── anime_gen.py       # Stylized 2D avatar pipeline
-│   │   └── morphable_diffusion.py # Final 3D generation manager
-│   ├── synthesis/
-│   │   └── multi_view_generator.py  # ControlNet Guided Synthesis + Restoration
-│   ├── recon/
-│   │   ├── mesh_refiner.py    # NEW: Subdivision & Laplacian Smoothing (v2.0)
-│   │   ├── texture_composer.py # NEW: Brightness Norm & Cubic Weighting (v2.0)
-│   │   └── mesh_fit.py        # LM-based shape optimization
-│   └── preprocess/
-│       ├── segment.py         # Multi-layer background removal
-│       └── extractor.py       # Landmark-based crop & align
-├── scripts/
-│   ├── setup_venv.py          # Windows environment auto-setup
-│   ├── train_lora.py          # Indian Cultural LoRA Trainer
-│   ├── fix_dependencies.py    # Conflict resolution for xformers/pytorch
-│   └── test_gpu.py            # CUDA Diagnostic Tool
-└── constraints.txt            # Package version pinning for stability
-```
+### 🌀 1. Perfection v2.0: Mesh Refinement
+Raw 3DMM outputs are often "pointy" or low-poly. Our **Perfection** pass includes:
+*   **Loop Subdivision**: Interstitial vertices are mathematically interpolated, increasing surface resolution by 4x.
+*   **Laplacian Smoothing**: We solve the differential equation $\Delta X = 0$ on the mesh to remove noise while keeping the volume consistent with the user's face.
+
+### � 2. ControlNet Guided Synthesis
+Side views (Yaw 45-90°) are traditionally hard. We solve this by:
+1.  **Geometric Hinting**: We warp the front photo to the target angle.
+2.  **Canny Guidance**: We extract the edges of that warp.
+3.  **Structural Control**: ControlNet uses these edges as a "stencil," ensuring the AI doesn't change the person's jawline or nose shape during synthesis.
+
+### 🎨 3. Intelligent Texture Composer
+To avoid the "seam" problem where different views meet:
+*   **Brightness Normalization**: Every view is histogram-matched to the front photo.
+*   **Cubic Weighting**: $Weight = confidence^{3.0}$ — this sharply prioritizes the best camera for each pixel, eliminating the "ghosting" or "double-nose" effect.
 
 ---
 
-## 🛠️ Performance & Memory Optimization
-
-The pipeline is engineered to run on **consumer-grade GPUs (4GB VRAM)** through several strategies:
-1.  **Sequential CPU Offloading**: Moves model components to RAM when not in active use.
-2.  **8-bit Quantization**: Uses `bitsandbytes` to reduce the Weight footprint of the UNet.
-3.  **VAE Tiling**: Processes high-resolution textures in small tiles to prevent OOM errors.
-4.  **ONNX Acceleration**: 3DDFA_V2 is served via ONNX Runtime for 10x faster geometry regression compared to raw PyTorch.
+## � Current Project Status
+- [x] **Core Recontruction**: 3DDFA_V2 + BFM Pipeline functional.
+- [x] **Perfection v2.0**: Laplacian smoothing and subdivision implemented.
+- [x] **16+ View Synthesis**: ControlNet-guided engine fully operational.
+- [x] **High-Res Texture**: Seamless blending with brightness normalization verified.
+- [x] **Interactive UI**: Slider-based preview and BFM tuning live.
+- [x] **Optimization**: 4GB VRAM sequential offloading active.
 
 ---
 
-## � Installation & Quick Start
+## 🚀 Installation & Quick Start
 
-### 1. Prerequisites
-*   **OS**: Windows 10/11
-*   **Python**: 3.11.x (Strictly required for xformers compatibility)
-*   **GPU**: NVIDIA RTX 20-series or higher (4GB+ VRAM)
-
-### 2. Setup
 ```powershell
-# Auto-setup virtual environment and dependencies
+# 1. Setup Virtual Environment
 python scripts/setup_venv.py
 
-# Launch the Application
+# 2. Run the App
 python app.py
 ```
-
-### 3. Workflow
-1.  **Input**: Upload a high-quality, front-facing face photo.
-2.  **2D Style**: Toggle between "Stylized Digital Art" or "3D Cartoon".
-3.  **3D Perfection**: Click "Generate 3D Avatar" to trigger the synthesis + refinement pipeline.
-4.  **Review**: Use the **Dynamic Preview Slider** to inspect the 16 synthesized side views.
-5.  **Refine**: Live-tune the expression and shape sliders.
-6.  **Export**: Save as `.glb` for Unity, Unreal Engine, or WebGL.
 
 ---
 
 ## 📄 References & Credits
-
-*   **Geometry**: [3DDFA_V2](https://github.com/cleardusk/3DDFA_V2) (Towards Fast, Accurate 3D Face Alignment).
-*   **Morphable Model**: BFM 2009 (A Morphable Model for the Synthesis of 3D Faces).
-*   **Synthesis**: Stable Diffusion + [ControlNet](https://github.com/lllyasviel/ControlNet).
-*   **Dataset**: IMFDB (Indian Movie Face Database).
+*   **3DDFA**: cleardusk/3DDFA_V2
+*   **BFM**: Basel Face Model 2009
+*   **Synthesis**: lllyasviel/ControlNet-Canny
+*   **Dataset**: IMFDB (Indian Movie Face Database)
 
 ---
 *Developed with ❤️ by the GUNI Research Intern Team*
