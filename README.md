@@ -139,6 +139,56 @@ Raw data is transformed into "ML-Ready" assets via:
 - **Background Normalization**: Removing noisy studio backgrounds to focus on facial features.
 - **Resolution Upscaling**: Using ESRGAN to ensure training pairs are high-definition.
 
+### 3. Training Methodology & Fine-Tuning
+The project utilizes **Parameter-Efficient Fine-Tuning (PEFT)** to adapt a base Diffusion model to Indian facial features without compromising its general knowledge.
+*   **LoRA (Low-Rank Adaptation)**: We inject trainable rank-decomposition matrices into each layer of the Transformer architecture.
+*   **Hyperparameters**:
+    - **Rank (R)**: 16 (Optimal balance between flexibility and file size).
+    - **Alpha**: 32 (Scaling factor for LoRA influence).
+    - **Trigger Word**: `indianface` — ensures the model activates cultural priors.
+    - **Precision**: Mixed-precision `fp16` for faster training.
+*   **Optimization**: AdamW optimizer with a learning rate of $2 \times 10^{-4}$, utilizing **Cosine Annealing** for smooth convergence.
+
+---
+
+## 🚧 Current Challenges & Mitigation
+
+Despite the success of **Perfection v2.0**, several engineering challenges were addressed:
+
+1.  **VRAM Constraints (The 4GB Problem)**:
+    - *Challenge*: Diffusion models typically require 12GB+ VRAM for inference.
+    - *Solution*: Implemented **Sequential CPU Offloading** and **VAE Tiling**. This allows the 3D model to be generated on consumer-tier RTX 3050 GPUs by moving model weights to system RAM when dormant.
+2.  **Identity Hallucination at Extreme Angles**:
+    - *Challenge*: AI often "guesses" a different person for the back of the head.
+    - *Solution*: Integrated **ControlNet-Canny** guards. By forcing the AI to strictly follow the Canny edges of a 3D-warped projection, we ensure absolute structural fidelity.
+3.  **Skin Tone & Texture Seams**:
+    - *Challenge*: Lighting variations across 16 views create visible "patchwork" textures.
+    - *Solution*: **Luminance Normalization Tuning**. We match the average brightness of every synthesized view to the original frontal photo's histogram before UV projection.
+
+---
+
+## 🎨 Tuning for Better Texturing & Skin Tone
+
+The current phase of the project focuses on **Skin-Tone Fidelity**:
+*   **Cubic Confidence Blending**: We tuned the texture fusion algorithm to use $Weight = Confidence^{3.0}$. This prevents "shadow bleed" from side views into the frontal face areas, keeping the skin tone clean and uniform.
+*   **Sharpening Pass**: Applied **Unsharp Masking** to the synthesized textures before baking, ensuring the final .GLB model has "photorealistic" skin pores and micro-details.
+
+---
+
+## 🔮 The "Next Plan": Future Roadmap
+
+The project is evolving into a full-scale **Digital Human** ecosystem:
+
+1.  **Real-time Rigging (ARKit Integration)**:
+    - *Strategy*: Map the BFM expression parameters to **ARKit Blendshapes** (52 shapes).
+    - *How*: We will use a linear transformation matrix to convert our regressed coefficients into Industry-standard facial action units.
+2.  **Diverse Cultural Attire (Clothing LoRAs)**:
+    - *Strategy*: Expand the training dataset to include Sari, Sherwani, and regional headgear (Pagri).
+    - *Goal*: Allow users to generate not just a face, but a culturally complete 3D entity.
+3.  **Sub-Surface Scattering (SSS)**:
+    - *Strategy*: Implement specialized shaders for the final export to simulate how light penetrates human skin.
+    - *How*: Adding **Normal Maps** and **Ambient Occlusion** channels to the GLB export pipeline.
+
 ---
 
 ## 🛠️ Technical Stack & Library Rationales
