@@ -323,7 +323,7 @@ class FaceReconstructor:
     # ──────────────────────────────────────
     #  Public API: Modify parameters
     # ──────────────────────────────────────
-    def modify_params(self, shape_deltas=None, expr_deltas=None):
+    def modify_params(self, shape_deltas=None, expr_deltas=None, refine=True):
         """
         Modify shape/expression parameters and regenerate the mesh.
 
@@ -374,8 +374,9 @@ class FaceReconstructor:
 
         mesh = self._build_trimesh(vertices, self.current_img)
         
-        # Apply refinement to modified mesh
-        mesh = self.refiner.refine(mesh)
+        # Apply refinement only if requested
+        if refine:
+            mesh = self.refiner.refine(mesh)
         
         return mesh
 

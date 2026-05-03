@@ -18,6 +18,9 @@ from src.models.flame_wrapper import FLAMEWrapper
 from src.models.morphable_diffusion import MorphableDiffusion
 from src.recon.mesh_fit import MeshFitter
 from src.recon.exporter import Exporter
+from src.models.audio_sync import AudioSynchronizer
+from src.models.face_animator import FaceAnimator
+from src.recon.video_renderer import VideoRenderer
 
 # ─────────────────────────────────────────────────────────────
 #  Initialize Modules
@@ -29,6 +32,12 @@ flame = FLAMEWrapper()
 mv_synthesis = MorphableDiffusion()
 fitter = MeshFitter()
 exporter = Exporter()
+audio_sync = AudioSynchronizer()
+face_animator = FaceAnimator()
+video_renderer = VideoRenderer()
+
+# State for lip sync: store the aligned face image
+_lip_sync_source_image = {"img": None}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -153,6 +162,9 @@ def generate_3d(input_img):
     if aligned is None:
         return None, None, None, None, None, msg
 
+    # Store aligned face for lip sync
+    _lip_sync_source_image["img"] = aligned
+
     # Step 1: Generate 15+ multi-angle views
     print("="*60)
     print("STEP 1/3: Multi-View Synthesis (15+ angles)...")
@@ -244,6 +256,70 @@ def update_customization(nose, jaw, eye, emotion):
     obj_path = os.path.abspath(os.path.join("assets", "avatar.obj"))
 
     return glb_path, glb_path, obj_path, "✅ Customization applied (BFM parametric update)."
+
+def generate_lip_sync(text, voice):
+    """Generate a lip-synced speaking video using 2D face animation."""
+    if not text.strip():
+        return None, "Please enter some text."
+    
+    source_img = _lip_sync_source_image.get("img")
+    if source_img is None:
+        return None, "⚠️ Generate a 3D avatar first! The face photo is needed for lip sync."
+    
+    try:
+        t_start = time.time()
+        
+        # Step 1: Set voice
+        voice_map = {
+            "Male (Christopher)": "en-US-ChristopherNeural",
+            "Female (Jenny)": "en-US-JennyNeural",
+            "Male (Guy)": "en-US-GuyNeural",
+            "Female (Aria)": "en-US-AriaNeural",
+            "Male Indian (Prabhat)": "en-IN-PrabhatNeural",
+            "Female Indian (Neerja)": "en-IN-NeerjaNeural",
+        }
+        selected_voice = voice_map.get(voice, "en-US-ChristopherNeural")
+        audio_sync.voice = selected_voice
+        
+        # Step 2: Generate speech audio
+        audio_path = os.path.abspath(os.path.join("assets", "speech.wav"))
+        print(f"[Lip Sync] Generating speech with voice: {selected_voice}")
+        audio_sync.generate_speech(text, audio_path)
+        t_audio = time.time() - t_start
+        print(f"[Lip Sync] Audio generated in {t_audio:.1f}s")
+        
+        # Step 3: Extract audio envelope for mouth movement
+        print("[Lip Sync] Extracting audio envelope...")
+        envelope = audio_sync.extract_envelope(audio_path, fps=30, max_mouth_open=2.0)
+        print(f"[Lip Sync] Envelope: {len(envelope)} frames")
+        
+        # Step 4: Set source face & generate animated frames
+        print("[Lip Sync] Detecting face landmarks...")
+        if not face_animator.set_source(source_img):
+            return None, "⚠️ Could not detect face landmarks. Try a clearer face photo."
+        
+        print(f"[Lip Sync] Generating {len(envelope)} animation frames...")
+        frames = face_animator.generate_frames(envelope, fps=30)
+        t_frames = time.time() - t_start
+        print(f"[Lip Sync] Frames generated in {t_frames:.1f}s")
+        
+        # Step 5: Assemble video
+        print("[Lip Sync] Assembling final video...")
+        video_path = video_renderer.generate_video_2d(
+            frames, audio_path, fps=30, filename="speaking_avatar.mp4"
+        )
+        
+        elapsed = time.time() - t_start
+        status = (
+            f"✅ Lip-sync video generated in {elapsed:.1f}s\n"
+            f"Voice: {voice} | Frames: {len(frames)} | Duration: {len(envelope)/30:.1f}s"
+        )
+        return video_path, status
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return None, f"❌ Error generating lip sync: {str(e)}"
 
 
 
@@ -540,6 +616,39 @@ with gr.Blocks(
                     "Apply Customization", variant="secondary"
                 )
 
+                # Speaking Avatar section
+                gr.Markdown(
+                    "#### 🗣️ Speaking Avatar (Lip Sync)",
+                    elem_classes="customization-section"
+                )
+                gr.Markdown(
+                    "Type any text and your avatar will speak it with "
+                    "realistic lip movement and facial expressions.",
+                    elem_classes="section-desc"
+                )
+                speech_text = gr.Textbox(
+                    label="Enter text for the avatar to speak",
+                    lines=3,
+                    placeholder="Hello! I am your 3D avatar. I can speak any text you type here with realistic lip movement."
+                )
+                voice_select = gr.Dropdown(
+                    choices=[
+                        "Male (Christopher)",
+                        "Female (Jenny)",
+                        "Male (Guy)",
+                        "Female (Aria)",
+                        "Male Indian (Prabhat)",
+                        "Female Indian (Neerja)",
+                    ],
+                    label="Voice",
+                    value="Male (Christopher)"
+                )
+                speak_btn = gr.Button(
+                    "🎬 Generate Speaking Video",
+                    variant="primary",
+                    elem_classes="gen-btn"
+                )
+
             # ── Right column : Preview & 3D Viewer ──
             with gr.Column(scale=2):
                 avatar_preview = gr.Image(
@@ -547,6 +656,9 @@ with gr.Blocks(
                 )
                 model_viewer = gr.Model3D(
                     label="3D Model Viewer", height=400
+                )
+                speaking_video = gr.Video(
+                    label="Speaking Video Output", height=400
                 )
 
         # ── Multi-View Slider (below the main row) ──
@@ -663,6 +775,11 @@ with gr.Blocks(
         outputs=[model_viewer, download_glb, download_obj, avatar_3d_status]
     )
 
+    speak_btn.click(
+        fn=generate_lip_sync,
+        inputs=[speech_text, voice_select],
+        outputs=[speaking_video, avatar_3d_status]
+    )
 
 if __name__ == "__main__":
     print("Launching Indian Avatar AI Interface...")

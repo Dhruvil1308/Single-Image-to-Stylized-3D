@@ -140,7 +140,7 @@ class MeshFitter:
 
         return mesh
 
-    def modify_params(self, shape_deltas=None, expr_deltas=None):
+    def modify_params(self, shape_deltas=None, expr_deltas=None, refine=True):
         """
         Modify the last reconstructed face and return updated mesh.
         Called by customization sliders.
@@ -148,6 +148,7 @@ class MeshFitter:
         return self.reconstructor.modify_params(
             shape_deltas=shape_deltas,
             expr_deltas=expr_deltas,
+            refine=refine
         )
 
     def _default_mesh(self):

@@ -25,3 +25,9 @@ onnxruntime-gpu
 tqdm
 matplotlib
 pytest
+
+# Lip-Sync and Video Rendering
+edge-tts
+librosa
+moviepy
+pyglet<2
